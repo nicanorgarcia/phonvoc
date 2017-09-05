@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/zsh
 #
 # Copyright 2015 by Idiap Research Institute, http://www.idiap.ch
 # See the file COPYING for the licence associated with this software.
@@ -9,8 +9,8 @@
 
 # ------- UPDATE THESE PATHS TO FIT YOUR ENVIRONMENT ------ !!!
 # SSP and Kaldi paths
-export SSP_ROOT=path-to-SSP
-export KALDI_ROOT=path-to-Kaldi
+export SSP_ROOT="/home/nicanor/Investigacion/ssp"
+export KALDI_ROOT="/home/nicanor/Investigacion/kaldi"
 
 # Optional (required only for training): English training data
 export data=path-to-LibriSpeech
@@ -47,7 +47,7 @@ export cuda_cmd="queue.pl -l gpu"
 export PATH=$PWD/utils/:$PWD:$PATH
 export LC_ALL=C
 
-export N_JOBS=60
+export N_JOBS=4
 export USE_SGE=0
 
 ################################################################

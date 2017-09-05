@@ -11,7 +11,8 @@
 source Config.sh
 
 inAudio=$1
-inType=$2
+outPath=$2
+inType=$3
 hlayers=4
 
 if [[ -z $inAudio ]]; then
@@ -19,7 +20,7 @@ if [[ -z $inAudio ]]; then
     exit 1;
 fi
 if [[ $inType == "" ]]; then
-    $inType=0
+    inType=0
 fi
 
 if [[ ! -d steps ]]; then ln -sf $KALDI_ROOT/egs/wsj/s5/steps steps; fi
@@ -33,7 +34,7 @@ fi
 source lang/$lang/${phon}-map.sh
 
 id=$inAudio:t:r
-mkdir -p $id
+mkdir -p $outPath$id
 
 geOpts=(
     -r y # Restart the job if the execution host crashes
@@ -41,44 +42,45 @@ geOpts=(
     -cwd # Retain working directory
     -V   # Retain environment variables
     # -S /usr/bin/python2
-    -e $id/log
-    -o $id/log
+    -e $outPath$id/log
+    -o $outPath$id/log
     # -l q1d
     -l h_vmem=4G
 )
 
 if [[ $inType -eq 0 ]]; then
-    echo "$id $inAudio" > $id/wav.scp
-    echo "$id $voice" > $id/utt2spk
-    echo "$voice $id" > $id/spk2utt
+	echo "Type 0"
+    echo "$id $inAudio" > $outPath$id/wav.scp
+    echo "$id $voice" > $outPath$id/utt2spk
+    echo "$voice $id" > $outPath$id/spk2utt
 else
-    echo -n "" > $id/wav.temp.scp
+    echo -n "" > $outPath$id/wav.temp.scp
     for f in `cat $inAudio`; do
-	echo "$f:t:r $f" >> $id/wav.temp.scp
+	echo "$f:t:r $f" >> $outPath$id/wav.temp.scp
     done
-    cat $id/wav.temp.scp | sort > $id/wav.scp
-    cat $id/wav.scp | awk -v voice=$voice '{print $1" "voice}' > $id/utt2spk
-    cat $id/utt2spk | utils/utt2spk_to_spk2utt.pl | sort > $id/spk2utt
-    rm $id/wav.temp.scp
+    cat $outPath$id/wav.temp.scp | sort > $outPath$id/wav.scp
+    cat $outPath$id/wav.scp | awk -v voice=$voice '{print $1" "voice}' > $outPath$id/utt2spk
+    cat $outPath$id/utt2spk | utils/utt2spk_to_spk2utt.pl | sort > $outPath$id/spk2utt
+    rm $outPath$id/wav.temp.scp
 fi
 # exit
 
 echo "-- MFCC extraction for $id input --"
-steps/make_mfcc.sh --mfcc-config conf/mfcc.conf --nj 1 --cmd "run.pl" $id $id/log $id/mfcc
-steps/compute_cmvn_stats.sh $id $id/log $id/mfcc || exit 1;
+steps/make_mfcc.sh --mfcc-config conf/mfcc.conf --nj 1 --cmd "run.pl" $outPath$id $outPath$id/log $outPath$id/mfcc
+steps/compute_cmvn_stats.sh $outPath$id $outPath$id/log $outPath$id/mfcc || exit 1;
 # exit
 
 echo "-- Feature extraction for $id input --"
-feats="ark:copy-feats scp:$id/feats.scp ark:- |"
-[ ! -r $id/cmvn.scp ] && echo "Missing $id/cmvn.scp" && exit 1;
-feats="$feats apply-cmvn --norm-vars=false --utt2spk=ark:$id/utt2spk scp:$id/cmvn.scp ark:- ark:- |"
+feats="ark:copy-feats scp:$outPath$id/feats.scp ark:- |"
+[ ! -r $outPath$id/cmvn.scp ] && echo "Missing $outPath$id/cmvn.scp" && exit 1;
+feats="$feats apply-cmvn --norm-vars=false --utt2spk=ark:$outPath$id/utt2spk scp:$outPath$id/cmvn.scp ark:- ark:- |"
 feats="$feats add-deltas --delta-order=2 ark:- ark:- |"
 
 echo "-- Parameter extraction for paramType $paramType --"
 if [[ $paramType -eq 0 || $paramType -eq 2 ]]; then
 qsub $geOpts << EOF        
     nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
-    nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$id/phone.ark,$id/phone.scp
+    nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$outPath$id/phone.ark,$outPath$id/phone.scp
 EOF
 fi
 if [[ $paramType -eq 1 || $paramType -eq 2 ]]; then
@@ -88,12 +90,12 @@ if [[ $paramType -eq 1 || $paramType -eq 2 ]]; then
 qsub $geOpts << EOF        
 	nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
         nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
-        select-feats 1 ark:- ark:$id/${att}.ark
+        select-feats 1 ark:- ark:$outPath$id/${att}.ark
 EOF
 	else
 	    nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
 		nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
-		select-feats 1 ark:- ark:$id/${att}.ark
+		select-feats 1 ark:- ark:$outPath$id/${att}.ark
 	fi
     done
 fi
@@ -110,16 +112,16 @@ if [[ $USE_SGE == 1 ]]; then
 fi
 
 if [[ $paramType -eq 0 ]]; then
-    cp $id/phone.scp $id/feats.scp
+    cp $outPath$id/phone.scp $outPath$id/feats.scp
 else
     for att in "${(@k)attMap}"; do
-    	atts+=( ark:$id/${att}.ark )
+    	atts+=( ark:$outPath$id/${att}.ark )
     done
-    paste-feats $atts ark,scp:$id/paramType1.ark,$id/phnlfeats.scp
-    cp $id/phnlfeats.scp $id/feats.scp
+    paste-feats $atts ark,scp:$outPath$id/paramType1.ark,$outPath$id/phnlfeats.scp
+    cp $outPath$id/phnlfeats.scp $outPath$id/feats.scp
 
     if [[ $paramType -eq 2 ]]; then
-	paste-feats scp:$id/phnlfeats.scp scp:$id/phone.scp ark,scp:$id/paramType2.ark,$id/feats.scp
+	paste-feats scp:$outPath$id/phnlfeats.scp scp:$outPath$id/phone.scp ark,scp:$outPath$id/paramType2.ark,$outPath$id/feats.scp
     fi
 fi
 
@@ -132,7 +134,7 @@ for att in "${(@k)attMap}"; do
     echo $att $c
 done
 (( ce = c + 1 ))
-cp $id/feats.scp $id/feats.continuous.scp
-copy-feats scp:$id/feats.continuous.scp ark,t:- | \
+cp $outPath$id/feats.scp $outPath$id/feats.continuous.scp
+copy-feats scp:$outPath$id/feats.continuous.scp ark,t:- | \
     awk -v PHC=$c -v PHCE=$ce '{if (NF>2) {for(i=1; i<=PHC; i++) {printf "%1.0f ", $i} if ($PHCE != "") print $PHCE; else printf "\n"} else print $0}' | \
-    copy-feats ark,t:- ark,scp:$id/feats.binary.ark,$id/feats.binary.scp
+    copy-feats ark,t:- ark,scp:$outPath$id/feats.binary.ark,$outPath$id/feats.binary.scp
