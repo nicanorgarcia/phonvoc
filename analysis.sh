@@ -56,7 +56,7 @@ if [[ $inType -eq 0 ]]; then
 else
     echo -n "" > $outPath$id/wav.temp.scp
     for f in `cat $inAudio`; do
-	echo "$f:t:r $f" >> $outPath$id/wav.temp.scp
+		echo "$f:t:r $f" >> $outPath$id/wav.temp.scp
     done
     cat $outPath$id/wav.temp.scp | sort > $outPath$id/wav.scp
     cat $outPath$id/wav.scp | awk -v voice=$voice '{print $1" "voice}' > $outPath$id/utt2spk
@@ -78,26 +78,31 @@ feats="$feats add-deltas --delta-order=2 ark:- ark:- |"
 
 echo "-- Parameter extraction for paramType $paramType --"
 if [[ $paramType -eq 0 || $paramType -eq 2 ]]; then
+	if [[ $USE_SGE == 1 ]]; then
 qsub $geOpts << EOF        
-    nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
-    nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$outPath$id/phone.ark,$outPath$id/phone.scp
+    	nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
+	    nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$outPath$id/phone.ark,$outPath$id/phone.scp
 EOF
+	else
+		nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
+	    nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$outPath$id/phone.ark,$outPath$id/phone.scp
+	fi
 fi
 if [[ $paramType -eq 1 || $paramType -eq 2 ]]; then
     for att in "${(@k)attMap}"; do
-	echo $att
-	if [[ $USE_SGE == 1 ]]; then
+		echo $att
+		if [[ $USE_SGE == 1 ]]; then
 qsub $geOpts << EOF        
-	nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
-        nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
-        select-feats 1 ark:- ark:$outPath$id/${att}.ark
+			nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
+		    nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
+		    select-feats 1 ark:- ark:$outPath$id/${att}.ark
 EOF
-	else
-	    nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
-		nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
-		select-feats 1 ark:- ark:$outPath$id/${att}.ark
-	fi
-    done
+		else
+			nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
+			nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
+			select-feats 1 ark:- ark:$outPath$id/${att}.ark
+		fi
+		done
 fi
 
 if [[ $USE_SGE == 1 ]]; then
