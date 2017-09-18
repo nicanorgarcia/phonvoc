@@ -12,16 +12,13 @@ source Config.sh
 
 inAudio=$1
 outPath=$2
-inType=$3
 hlayers=4
 
 if [[ -z $inAudio ]]; then
     echo "PhonVoc analysis: input audio not provided!"
     exit 1;
 fi
-if [[ $inType == "" ]]; then
-    inType=0
-fi
+
 
 if [[ ! -d steps ]]; then ln -sf $KALDI_ROOT/egs/wsj/s5/steps steps; fi
 if [[ ! -d utils ]]; then ln -sf $KALDI_ROOT/egs/wsj/s5/utils utils; fi
@@ -48,20 +45,23 @@ geOpts=(
     -l h_vmem=4G
 )
 
-if [[ $inType -eq 0 ]]; then
+if [[ -f $inAudio ]]; then
 	echo "Type 0"
     echo "$id $inAudio" > $outPath$id/wav.scp
     echo "$id $voice" > $outPath$id/utt2spk
     echo "$voice $id" > $outPath$id/spk2utt
-else
+elif [[ -d $inAudio ]]; then
     echo -n "" > $outPath$id/wav.temp.scp
-    for f in `cat $inAudio`; do
-		echo "$f:t:r $f" >> $outPath$id/wav.temp.scp
+    for f in $inAudio*; do
+            echo $f
+	       echo "$f:t:r $f" >> $outPath$id/wav.temp.scp
     done
     cat $outPath$id/wav.temp.scp | sort > $outPath$id/wav.scp
     cat $outPath$id/wav.scp | awk -v voice=$voice '{print $1" "voice}' > $outPath$id/utt2spk
     cat $outPath$id/utt2spk | utils/utt2spk_to_spk2utt.pl | sort > $outPath$id/spk2utt
     rm $outPath$id/wav.temp.scp
+else
+    echo "Usage: $0 path-to-audio-dir-or-file results-path"
 fi
 # exit
 
@@ -79,7 +79,7 @@ feats="$feats add-deltas --delta-order=2 ark:- ark:- |"
 echo "-- Parameter extraction for paramType $paramType --"
 if [[ $paramType -eq 0 || $paramType -eq 2 ]]; then
 	if [[ $USE_SGE == 1 ]]; then
-qsub $geOpts << EOF        
+qsub $geOpts << EOF
     	nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
 	    nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$outPath$id/phone.ark,$outPath$id/phone.scp
 EOF
@@ -92,12 +92,12 @@ if [[ $paramType -eq 1 || $paramType -eq 2 ]]; then
     for att in "${(@k)attMap}"; do
 		echo $att
 		if [[ $USE_SGE == 1 ]]; then
-qsub $geOpts << EOF        
+qsub $geOpts << EOF
 			nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
 		    nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
 		    select-feats 1 ark:- ark:$outPath$id/${att}.ark
 EOF
-		else
+		else # Not using SGE
 			nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
 			nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
 			select-feats 1 ark:- ark:$outPath$id/${att}.ark
