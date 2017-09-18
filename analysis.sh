@@ -53,8 +53,8 @@ if [[ $inType -eq 0 ]]; then
     echo "$voice $id" > $id/spk2utt
 else
     echo -n "" > $id/wav.temp.scp
-    for f in `cat $inAudio`; do
-	echo "$f:t:r $f" >> $id/wav.temp.scp
+    for f in "$inAudio/*.wav"; do
+	       echo "$f:t:r $f" >> $id/wav.temp.scp
     done
     cat $id/wav.temp.scp | sort > $id/wav.scp
     cat $id/wav.scp | awk -v voice=$voice '{print $1" "voice}' > $id/utt2spk
@@ -76,16 +76,21 @@ feats="$feats add-deltas --delta-order=2 ark:- ark:- |"
 
 echo "-- Parameter extraction for paramType $paramType --"
 if [[ $paramType -eq 0 || $paramType -eq 2 ]]; then
-qsub $geOpts << EOF        
+    if [[ $USE_SGE == 1 ]]; then
+qsub $geOpts << EOF
     nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
     nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$id/phone.ark,$id/phone.scp
 EOF
+    else
+        nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
+        nnet-forward train/dnns/${lang}-${phon}/phone-${hlayers}l-dnn/final.nnet ark:- ark,scp:$id/phone.ark,$id/phone.scp
+    fi
 fi
 if [[ $paramType -eq 1 || $paramType -eq 2 ]]; then
     for att in "${(@k)attMap}"; do
 	echo $att
 	if [[ $USE_SGE == 1 ]]; then
-qsub $geOpts << EOF        
+qsub $geOpts << EOF
 	nnet-forward train/dnns/pretrain-dbn-$lang/final.feature_transform "${feats}" ark:- | \
         nnet-forward train/dnns/${lang}-${phon}/${att}-${hlayers}l-dnn/final.nnet ark:- ark:- | \
         select-feats 1 ark:- ark:$id/${att}.ark
